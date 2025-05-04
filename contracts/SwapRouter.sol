@@ -3,6 +3,8 @@ pragma solidity ^0.8.0;
 
 import "./interface/ISwapRouter.sol";
 import "./interface/ISingleSwap.sol";
+import "./interface/IERC20.sol";
+import "hardhat/console.sol";
 
 contract SwapRouter is ISwapRouter {
     error NotOnwerAddress();
@@ -68,6 +70,17 @@ contract SwapRouter is ISwapRouter {
     function singleSwap(
         ExactInputSingleParamsContainDexId calldata params
     ) public {
+        // 需要从转入tokenIn
+        IERC20(params.params.tokenIn).transferFrom(
+            msg.sender,
+            address(this),
+            params.params.amountIn
+        );
+        // 向singleSwapExecAddress授权
+        IERC20(params.params.tokenIn).approve(
+            singleSwapExecAddress,
+            params.params.amountIn
+        );
         ISingleSwap singleSwapContract = ISingleSwap(singleSwapExecAddress);
         singleSwapContract.singleSwap(params.dexId, params.params);
     }
