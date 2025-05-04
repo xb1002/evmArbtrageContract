@@ -4,38 +4,28 @@ pragma solidity ^0.8.0;
 import "./interface/ISwapRouter.sol";
 import "./interface/ISingleSwap.sol";
 
-contract SwapRouter {
+contract SwapRouter is ISwapRouter {
     error NotOnwerAddress();
 
     //这里可以考虑创建一个exchange的结构体来存储exchange相关信息，再通过一个mapping实现dexId和exchange的映射
-    struct Exchange {
-        string name;
-        uint8 dexId;
-        address swapRouterAddress;
-    }
+    // struct Exchange {
+    //     string name;
+    //     uint8 dexId;
+    //     address swapRouterAddress;
+    // }
 
-    struct ExactInputSingleParams {
-        address tokenIn;
-        address tokenOut;
-        uint24 fee;
-        address recipient;
-        uint256 amountIn;
-        uint256 amountOutMinimum;
-        uint160 sqrtPriceLimitX96;
-    }
+    // struct ExactInputSingleParamsContainDexId {
+    //     uint8 dexId;
+    //     ISingleSwap.ExactInputSingleParams params;
+    // }
 
-    struct ExactInputSingleParamsContainDexId {
-        uint8 dexId;
-        ExactInputSingleParams params;
-    }
-
-    struct ExactInputParams {
-        bytes path;
-        address recipient;
-        uint256 deadline;
-        uint256 amountIn;
-        uint256 amountOutMinimum;
-    }
+    // struct ExactInputParams {
+    //     bytes path;
+    //     address recipient;
+    //     uint256 deadline;
+    //     uint256 amountIn;
+    //     uint256 amountOutMinimum;
+    // }
 
     address public owner;
     address private singleSwapExecAddress;
@@ -55,19 +45,29 @@ contract SwapRouter {
     }
 
     function updateExchanges() private {
+        ISingleSwap.Exchange[] memory exchangesArray;
         ISingleSwap singleSwapContract = ISingleSwap(singleSwapExecAddress);
-        (exchanges, exchangesCount) = singleSwapContract.getExchanges();
+        (exchangesArray, exchangesCount) = singleSwapContract.getExchanges();
+        for (uint8 i = 0; i < exchangesCount; i++) {
+            exchanges[i] = Exchange({
+                name: exchangesArray[i].name,
+                dexId: exchangesArray[i].dexId,
+                swapRouterAddress: exchangesArray[i].swapRouterAddress
+            });
+        }
     }
 
-    function updateSingleSwapExecAddress public OnlyOwner(
+    function updateSingleSwapExecAddress(
         address _singleSwapExecAddress
-    ) public {
+    ) public OnlyOwner {
         singleSwapExecAddress = _singleSwapExecAddress;
         updateExchanges();
     }
 
     // 注意这里用到的singleSwap方法是exactInputSingle方法
-    function singleSwap(ExactInputSingleParamsContainDexId calldata params) public {
+    function singleSwap(
+        ExactInputSingleParamsContainDexId calldata params
+    ) public {
         ISingleSwap singleSwapContract = ISingleSwap(singleSwapExecAddress);
         singleSwapContract.singleSwap(params.dexId, params.params);
     }

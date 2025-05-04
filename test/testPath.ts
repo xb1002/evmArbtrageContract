@@ -1,10 +1,10 @@
 import { ethers } from "hardhat";
-import { Test } from "../typechain-types";
+import { TestPath } from "../typechain-types";
 describe("测试", () => {
   // 部署Test合约
-  let test: Test;
+  let test: TestPath;
   before(async () => {
-    const Test = await ethers.getContractFactory("Test");
+    const Test = await ethers.getContractFactory("TestPath");
     test = await Test.deploy();
     await test.deploymentTransaction()?.wait();
     console.log("Contract deployed!");
