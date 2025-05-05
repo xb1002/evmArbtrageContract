@@ -83,3 +83,11 @@
         singleSwapContract.singleSwap(params);
     }
 ```
+
+#### 闪电贷支持
+
+完成 SwapRouter 合约的设计及其实现，需要考虑增加对于闪电贷的支持，
+
+由于 FlashLoan 是先向 pool 调用 flash 函数，flash 函数将所借贷的代币转入 recipient，再进入 msg.sender 这个继承了 IUniswapV3FlashCallback 接口的这个合约调用 uniswapV3FlashCallback 函数，执行完 uniswapV3FlashCallback 再回到 flash 函数中检查所借出的代币连带手续费是否归还，如果检查不通过则回滚交易
+
+因此想通过使用闪电贷并借出代币进行交换套利，其执行逻辑需要放在 uniswapV3FlashCallback 函数中
