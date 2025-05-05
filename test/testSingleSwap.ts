@@ -1,6 +1,7 @@
 import { ethers } from "hardhat";
 import { expect, assert } from "chai";
-import { SingleSwap, ISingleSwap, IWETH } from "../typechain-types";
+import { SingleSwap, ISingleSwap, IWETH, IERC20 } from "../typechain-types";
+import { bigint } from "hardhat/internal/core/params/argumentTypes";
 
 type Token = {
   name: string;
@@ -27,6 +28,7 @@ const usdc: Token = {
 };
 
 describe("测试SingleSwap合约", () => {
+  // 先部署一个SingleSwap合约
   let singleSwapContract: SingleSwap;
   before(async () => {
     const SingleSwap = await ethers.getContractFactory("SingleSwap");
@@ -36,67 +38,119 @@ describe("测试SingleSwap合约", () => {
     );
     await singleSwapContract.deploymentTransaction()?.wait();
   });
-  it("测试getExchanges函数", async () => {
-    let exchanges: ISingleSwap.ExchangeStruct[];
-    let exchangesCount: bigint;
-    [exchanges, exchangesCount] = await singleSwapContract.getExchanges();
-    assert(
-      exchanges[0].swapRouterAddress === uniswapV3RouterAddress,
-      "uniswapV3RouterAddress not equal"
-    );
-    assert(
-      exchanges[1].swapRouterAddress === pancakeV3RouterAddress,
-      "pancakeV3RouterAddress not equal"
-    );
-    assert(exchangesCount === 2n, "exchangesCount not equal");
+  beforeEach(async () => {
+    // 在每一次测试前都mine一个块
+    await ethers.provider.send("evm_mine", []);
   });
 
-  it("测试singleSwap函数", async () => {
-    // singer
-    const signer = (await ethers.getSigners())[0];
-    // 要交换的amount
-    const amount = 10; // weth
+  describe("测试getExchanges函数", () => {
+    let exchanges: ISingleSwap.ExchangeStruct[];
+    let exchangesCount: bigint;
+    before(async () => {
+      [exchanges, exchangesCount] = await singleSwapContract.getExchanges();
+    });
+    it("exchange[0]应该是uniswap V3", async () => {
+      assert(exchanges[0].swapRouterAddress == uniswapV3RouterAddress);
+    });
+    it("exchange[1]应该是pancake V3", async () => {
+      assert(exchanges[1].swapRouterAddress == pancakeV3RouterAddress);
+    });
+    it("exchangesCount应该是2", async () => {
+      assert(exchangesCount == 2n);
+    });
+  });
 
-    // 获取一些WETH
-    const wethContract = (await ethers.getContractAt(
-      "IWETH",
-      weth.address
-    )) as IWETH;
-    await wethContract.deposit({ value: BigInt(amount * 10 ** weth.decimals) });
-    // 查看weth余额
-    const wethBalance = await wethContract.balanceOf(signer.address);
-    console.log("wethBalance", wethBalance / BigInt(10 ** weth.decimals));
+  describe("测试singleSwap函数", () => {
+    let signer: Awaited<ReturnType<typeof ethers.getSigners>>[0];
+    let amount: bigint;
+    let wethContract: IWETH;
+    let usdcContract: IERC20;
+    before(async () => {
+      signer = (await ethers.getSigners())[0];
+      amount = BigInt(10) * BigInt(10 ** weth.decimals);
+      wethContract = await ethers.getContractAt("IWETH", weth.address);
+      usdcContract = await ethers.getContractAt("IERC20", usdc.address);
 
-    // 查看usdc余额
-    const usdcContract = await ethers.getContractAt("IERC20", usdc.address);
-    const usdcBalanceBefore = await usdcContract.balanceOf(signer.address);
-    console.log(
-      "usdcBalanceBefore",
-      usdcBalanceBefore / BigInt(10 ** usdc.decimals)
-    );
-
-    // 先向singleSwap合约授权10weth
-    await wethContract.approve(
-      await singleSwapContract.getAddress(),
-      BigInt(amount * 10 ** weth.decimals)
-    );
-    const params: ISingleSwap.ExactInputSingleParamsStruct = {
-      tokenIn: weth.address,
-      tokenOut: usdc.address,
-      fee: 3000,
-      recipient: signer.address,
-      amountIn: BigInt(amount * 10 ** weth.decimals),
-      amountOutMinimum: 0,
-      sqrtPriceLimitX96: 0,
-    };
-    let tx = await singleSwapContract.singleSwap(0, params);
-    await tx.wait();
-    // 查看usdc余额
-    const usdcBalanceAfter = await usdcContract.balanceOf(signer.address);
-    console.log("usdcBalance", usdcBalanceAfter / BigInt(10 ** usdc.decimals));
-    assert(
-      usdcBalanceAfter > usdcBalanceBefore,
-      "usdcBalanceAfter not greater than usdcBalanceBefore"
-    );
+      // 获取一些WETH
+      await wethContract.deposit({ value: BigInt(1000 * 10 ** 18) });
+    });
+    it("使用uniswapV3执行swap", async () => {
+      const params: ISingleSwap.ExactInputSingleParamsStruct = {
+        tokenIn: weth.address,
+        tokenOut: usdc.address,
+        fee: 3000,
+        recipient: signer,
+        deadline: BigInt(Math.floor(Date.now() / 1000) + 60 * 60 * 24),
+        amountIn: amount,
+        amountOutMinimum: 0,
+        sqrtPriceLimitX96: 0,
+      };
+      // 向合约授权amount
+      await wethContract.approve(
+        await singleSwapContract.getAddress(),
+        params.amountIn
+      );
+      const wethBalanceBefore = await wethContract.balanceOf(signer.address);
+      const usdcBalanceBefore = await usdcContract.balanceOf(signer.address);
+      // 预览swap结果
+      const amountOut = await singleSwapContract.singleSwap.staticCall(
+        0,
+        params
+      );
+      // 执行swap
+      let tx = await singleSwapContract.singleSwap(0, params);
+      await tx.wait();
+      // 获取结果
+      const wethBalanceAfter = await wethContract.balanceOf(signer.address);
+      const usdcBalanceAfter = await usdcContract.balanceOf(signer.address);
+      // 断言
+      assert(
+        wethBalanceBefore - wethBalanceAfter == params.amountIn,
+        "wethBalanceBefore - wethBalanceAfter not equal to params.amountIn"
+      );
+      assert(
+        usdcBalanceAfter - usdcBalanceBefore == amountOut,
+        "usdcBalanceAfter - usdcBalanceBefore not equal to amountOut"
+      );
+    });
+    it("使用pancakeV3执行swap", async () => {
+      const params: ISingleSwap.ExactInputSingleParamsStruct = {
+        tokenIn: weth.address,
+        tokenOut: usdc.address,
+        fee: 500,
+        recipient: signer,
+        deadline: BigInt(Math.floor(Date.now() / 1000) + 60 * 60 * 24),
+        amountIn: amount,
+        amountOutMinimum: 0,
+        sqrtPriceLimitX96: 0,
+      };
+      // 向合约授权amount
+      await wethContract.approve(
+        await singleSwapContract.getAddress(),
+        params.amountIn
+      );
+      const wethBalanceBefore = await wethContract.balanceOf(signer.address);
+      const usdcBalanceBefore = await usdcContract.balanceOf(signer.address);
+      // 预览swap结果
+      const amountOut = await singleSwapContract.singleSwap.staticCall(
+        1,
+        params
+      );
+      // 执行swap
+      let tx = await singleSwapContract.singleSwap(1, params);
+      await tx.wait();
+      // 获取结果
+      const wethBalanceAfter = await wethContract.balanceOf(signer.address);
+      const usdcBalanceAfter = await usdcContract.balanceOf(signer.address);
+      // 断言
+      assert(
+        wethBalanceBefore - wethBalanceAfter == params.amountIn,
+        "wethBalanceBefore - wethBalanceAfter not equal to params.amountIn"
+      );
+      assert(
+        usdcBalanceAfter - usdcBalanceBefore == amountOut,
+        "usdcBalanceAfter - usdcBalanceBefore not equal to amountOut"
+      );
+    });
   });
 });
