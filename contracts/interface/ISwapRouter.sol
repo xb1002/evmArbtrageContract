@@ -29,9 +29,9 @@ interface ISwapRouter {
 
     function singleSwap(
         ExactInputSingleParamsContainDexId calldata params
-    ) external;
+    ) external returns (uint256);
 
-    function swap() external returns (uint256 amount);
+    function swap(ExactInputParams memory params) external returns (uint256);
 
     function getSupportDexName()
         external

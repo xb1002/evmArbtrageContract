@@ -5,6 +5,7 @@ import "./exchange/uniswapV3/ISwapRouterUniswapV3.sol";
 import "./exchange/pancakeV3/ISwapRouterPancakeV3.sol";
 import "./interface/ISingleSwap.sol";
 import "./interface/IERC20.sol";
+import "hardhat/console.sol";
 
 contract SingleSwap is ISingleSwap {
     error UnknownDexId();
@@ -31,7 +32,7 @@ contract SingleSwap is ISingleSwap {
 
     function singleSwap(
         uint8 dexId,
-        ExactInputSingleParams calldata params
+        ExactInputSingleParams memory params
     ) external returns (uint256) {
         // 具体执行逻辑
         address tokenIn = params.tokenIn;
@@ -53,6 +54,7 @@ contract SingleSwap is ISingleSwap {
             params.amountIn
         );
         if (dexId == 0) {
+            console.log("execute uniswap v3");
             ISwapRouterUniswapV3.UniswapV3ExactInputSingleParams
                 memory exactInputSingleParams = getUniswapV3ExactInputSingleParams(
                     params
@@ -60,6 +62,7 @@ contract SingleSwap is ISingleSwap {
             amountOut = ISwapRouterUniswapV3(exchanges[dexId].swapRouterAddress)
                 .exactInputSingle(exactInputSingleParams);
         } else if (dexId == 1) {
+            console.log("execute pancake v3");
             ISwapRouterPancakeV3.PancakeV3ExactInputSingleParams
                 memory exactInputSingleParams = getPancakeV3ExactInputSingleParams(
                     params
@@ -73,7 +76,7 @@ contract SingleSwap is ISingleSwap {
     }
 
     function getUniswapV3ExactInputSingleParams(
-        ExactInputSingleParams calldata params
+        ExactInputSingleParams memory params
     )
         private
         pure
@@ -85,7 +88,9 @@ contract SingleSwap is ISingleSwap {
                 tokenOut: params.tokenOut,
                 fee: params.fee,
                 recipient: params.recipient,
-                deadline: type(uint256).max,
+                deadline: params.deadline == 0
+                    ? type(uint256).max
+                    : params.deadline,
                 amountIn: params.amountIn,
                 amountOutMinimum: params.amountOutMinimum,
                 sqrtPriceLimitX96: params.sqrtPriceLimitX96
@@ -93,7 +98,7 @@ contract SingleSwap is ISingleSwap {
     }
 
     function getPancakeV3ExactInputSingleParams(
-        ExactInputSingleParams calldata params
+        ExactInputSingleParams memory params
     )
         private
         pure
@@ -105,6 +110,9 @@ contract SingleSwap is ISingleSwap {
                 tokenOut: params.tokenOut,
                 fee: params.fee,
                 recipient: params.recipient,
+                deadline: params.deadline == 0
+                    ? type(uint256).max
+                    : params.deadline,
                 amountIn: params.amountIn,
                 amountOutMinimum: params.amountOutMinimum,
                 sqrtPriceLimitX96: params.sqrtPriceLimitX96
