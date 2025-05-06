@@ -1,33 +1,53 @@
 import { ethers } from "hardhat";
+import { Token, PoolInfo } from "./type";
 
-const weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
-const usdc = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
-const usdt = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
+type BytesLike = string | Uint8Array;
+type PathParams = string | number | bigint;
+export function generatePath(pathParams: PathParams[]): string {
+  // 确保输入的(参数数量-1)/3是整数
+  const n = (pathParams.length - 1) / 3;
+  if (n % 1 !== 0) {
+    throw new Error("invalid path params");
+  }
+  let formatPathParams: BytesLike[] = [];
+  for (let i = 0; i < n; i++) {
+    formatPathParams.push(
+      pathParams[i * 3] as string, //address
+      ethers.toBeHex(pathParams[i * 3 + 1], 3), //fee
+      ethers.toBeHex(pathParams[i * 3 + 2], 1) //dexId
+    );
+  }
+  formatPathParams.push(pathParams[pathParams.length - 1] as string);
+  return ethers.concat(formatPathParams);
+}
 
-const fee0 = 60;
-const fee1 = 10;
+// 测试函数
+function testGeneratePath() {
+  const weth: Token = {
+    name: "Wrapped Ether",
+    symbol: "WETH",
+    decimals: 18,
+    address: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+  };
+  const usdc: Token = {
+    name: "USD Coin",
+    symbol: "USDC",
+    decimals: 6,
+    address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+  };
+  const pool0 = new PoolInfo(weth.address, usdc.address, 500, 0);
+  const pool1 = new PoolInfo(usdc.address, weth.address, 100, 0);
+  let path = generatePath([
+    weth.address,
+    pool0.fee,
+    pool0.dexId,
+    usdc.address,
+    pool1.fee,
+    pool1.dexId,
+    weth.address,
+  ]);
+  console.log(path);
+}
 
-const dexId0 = 0;
-const dexId1 = 1;
-
-// 将fee0和fee1转换为3bytes
-const fee0Bytes = ethers.toBeHex(fee0, 3);
-const fee1Bytes = ethers.toBeHex(fee1, 3);
-console.log(fee0Bytes, fee1Bytes);
-
-// 将dexId0和dexId1转换1bytes
-const dexId0Bytes = ethers.toBeHex(dexId0, 1);
-const dexId1Bytes = ethers.toBeHex(dexId1, 1);
-console.log(dexId0Bytes, dexId1Bytes);
-
-// 按照顺序 weth fee0 dexId0 usdc fee1 dexId1 usdt
-const path = ethers.concat([
-  weth,
-  fee0Bytes,
-  dexId0Bytes,
-  usdc,
-  fee1Bytes,
-  dexId1Bytes,
-  usdt,
-]);
-console.log(path);
+// test
+// testGeneratePath();
