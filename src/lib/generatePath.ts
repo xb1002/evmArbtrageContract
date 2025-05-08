@@ -35,8 +35,8 @@ function testGeneratePath() {
     decimals: 6,
     address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
   };
-  const pool0 = new PoolInfo(weth.address, usdc.address, 500, 0);
-  const pool1 = new PoolInfo(usdc.address, weth.address, 100, 0);
+  const pool0 = new PoolInfo(weth, usdc, 500, 0);
+  const pool1 = new PoolInfo(usdc, weth, 100, 0);
   let path = generatePath([
     weth.address,
     pool0.fee,
